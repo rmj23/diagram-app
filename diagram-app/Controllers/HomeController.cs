@@ -3,7 +3,6 @@ using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Mvc;
 using diagram_app.Models;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.Identity.Web;
 using System.Web;
 using Newtonsoft.Json;
 
@@ -15,18 +14,16 @@ public class HomeController : Controller
 
     private readonly IConfiguration _configuration;
 
-    private readonly ITokenAcquisition _tokenAcquisition;
-
     private readonly IHttpClientFactory _httpClientFactory;
 
+    // This is a simple in-memory store for authorization requests. In a production application, you would use a more robust store.
     private static readonly Dictionary<string, TokenModel> s_authorizationRequests = new Dictionary<string, TokenModel>();
 
 
-    public HomeController(ILogger<HomeController> logger, IConfiguration configuration, ITokenAcquisition tokenAcquisition, IHttpClientFactory httpClientFactory)
+    public HomeController(ILogger<HomeController> logger, IConfiguration configuration, IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
         _configuration = configuration;
-        _tokenAcquisition = tokenAcquisition;
         _httpClientFactory = httpClientFactory;
     }
 
@@ -38,7 +35,6 @@ public class HomeController : Controller
     public async Task<IActionResult> PrivacyAsync()
     {
         string[] scopes = _configuration["scope"]?.Split(' ') ?? Array.Empty<string>();
-        //string accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(scopes);
         
         string state = Guid.NewGuid().ToString();
 
