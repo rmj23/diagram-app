@@ -1,10 +1,4 @@
 using diagram_app;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authentication.OpenIdConnect;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc.Authorization;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Identity.Client;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 
@@ -20,15 +14,20 @@ builder.Services.Configure<CookiePolicyOptions>(options =>
 });
 
 // Sign-in users with the Microsoft identity platform
-builder.Services.AddMicrosoftIdentityWebAppAuthentication(builder.Configuration);
+builder.Services
+    .AddMicrosoftIdentityWebAppAuthentication(builder.Configuration)
+    .EnableTokenAcquisitionToCallDownstreamApi()
+    .AddInMemoryTokenCaches();
 
 // Add services to the container.
-builder.Services.AddControllersWithViews().AddMicrosoftIdentityUI();
+builder.Services
+    .AddControllersWithViews()
+    .AddRazorRuntimeCompilation()
+    .AddMicrosoftIdentityUI();
+
+builder.Services.AddHttpClient();
 
 var app = builder.Build();
-
-app.UseAuthentication();
-app.UseAuthorization();
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -43,6 +42,10 @@ app.UseStaticFiles();
 app.UseCookiePolicy();
 
 app.UseRouting();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
 
 app.MapControllerRoute(
     name: "default",
