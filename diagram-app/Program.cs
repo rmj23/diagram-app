@@ -1,58 +1,34 @@
 using diagram_app;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc.Authorization;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Identity.Client;
+using Microsoft.Identity.Web;
+using Microsoft.Identity.Web.UI;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    // This lambda determines whether user consent for non-essential cookies is needed for a given request.
+    options.CheckConsentNeeded = context => true;
+    options.MinimumSameSitePolicy = SameSiteMode.Unspecified;
+    // Handling SameSite cookie according to https://docs.microsoft.com/en-us/aspnet/core/security/samesite?view=aspnetcore-3.1
+    options.HandleSameSiteCookieCompatibility();
+});
+
+// Sign-in users with the Microsoft identity platform
+builder.Services.AddMicrosoftIdentityWebAppAuthentication(builder.Configuration);
+
 // Add services to the container.
-builder.Services.AddControllersWithViews();
-
-var instance = builder.Configuration["AzureAd:Instance"];
-var tenantId = builder.Configuration["AzureAd:TenantId"];
-var clientId = builder.Configuration["AzureAd:ClientId"];
-var authority = $"{instance}{tenantId}/v2.0";
-
-builder.Services.AddSingleton<IPublicClientApplication>(PublicClientApplicationBuilder
-        .Create(clientId)
-        .WithAuthority(authority)
-        .WithRedirectUri("http://localhost:5134/Home")
-        .Build());
-
-builder.Services.AddSingleton<TokenAcquisitionService>();
+builder.Services.AddControllersWithViews().AddMicrosoftIdentityUI();
 
 var app = builder.Build();
 
-
 app.UseAuthentication();
-
-app.UseCookieAuthentication(new CookieAuthenticationOptions());
-app.UseOpenIdConnectAuthentication(
-    new OpenIdConnectAuthenticationOptions
-    {
-        // Sets the client ID, authority, and redirect URI as obtained from Web.config
-        ClientId = clientId,
-        Authority = authority,
-        RedirectUri = redirectUri,
-        // PostLogoutRedirectUri is the page that users will be redirected to after sign-out. In this case, it's using the home page
-        PostLogoutRedirectUri = redirectUri,
-        Scope = OpenIdConnectScope.OpenIdProfile,
-        // ResponseType is set to request the code id_token, which contains basic information about the signed-in user
-        ResponseType = OpenIdConnectResponseType.CodeIdToken,
-        // ValidateIssuer set to false to allow personal and work accounts from any organization to sign in to your application
-        // To only allow users from a single organization, set ValidateIssuer to true and the 'tenant' setting in Web.> config to the tenant name
-        // To allow users from only a list of specific organizations, set ValidateIssuer to true and use the ValidIssuers parameter
-        TokenValidationParameters = new TokenValidationParameters()
-        {
-            ValidateIssuer = false // Simplification (see note below)
-        },
-        // OpenIdConnectAuthenticationNotifications configures OWIN to send notification of failed authentications to > the OnAuthenticationFailed method
-        Notifications = new OpenIdConnectAuthenticationNotifications
-        {
-            AuthenticationFailed = OnAuthenticationFailed
-        }
-    }
-);
+app.UseAuthorization();
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -64,10 +40,9 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
+app.UseCookiePolicy();
 
 app.UseRouting();
-
-app.UseAuthorization();
 
 app.MapControllerRoute(
     name: "default",
