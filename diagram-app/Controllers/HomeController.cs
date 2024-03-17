@@ -2,9 +2,9 @@ using System.Diagnostics;
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Mvc;
 using diagram_app.Models;
-using Microsoft.AspNetCore.Authorization;
 using System.Web;
 using Newtonsoft.Json;
+using System.Xml.Schema;
 
 namespace diagram_app.Controllers;
 
@@ -16,15 +16,14 @@ public class HomeController : Controller
 
     private readonly IHttpClientFactory _httpClientFactory;
 
-    // This is a simple in-memory store for authorization requests. In a production application, you would use a more robust store.
-    private static readonly Dictionary<string, TokenModel> s_authorizationRequests = new Dictionary<string, TokenModel>();
+    private readonly WebAppDbContext _context;
 
-
-    public HomeController(ILogger<HomeController> logger, IConfiguration configuration, IHttpClientFactory httpClientFactory)
+    public HomeController(ILogger<HomeController> logger, IConfiguration configuration, IHttpClientFactory httpClientFactory, WebAppDbContext context)
     {
         _logger = logger;
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
+        _context = context;
     }
 
     public IActionResult Index()
@@ -38,7 +37,14 @@ public class HomeController : Controller
         
         string state = Guid.NewGuid().ToString();
 
-        s_authorizationRequests[state] = new TokenModel() { IsPending = true };
+        var token = new ExternalServiceToken()
+        {
+            IsPending = true,
+            State = state
+        };
+
+        _context.ExternalServiceToken.Add(token);
+        _context.SaveChanges();
 
         UriBuilder uriBuilder = new UriBuilder(_configuration.GetValue<string>("AuthUrl") ?? string.Empty);
 
@@ -82,12 +88,27 @@ public class HomeController : Controller
 
             if (responseMessage.IsSuccessStatusCode)
             {
-                String body = await responseMessage.Content.ReadAsStringAsync();
+                string body = await responseMessage.Content.ReadAsStringAsync();
 
-                TokenModel tokenModel = s_authorizationRequests[state];
+                var tokenModel = new TokenModel();
                 JsonConvert.PopulateObject(body, tokenModel);
 
-                ViewBag.Token = tokenModel;
+                var token = _context.ExternalServiceToken.FirstOrDefault(x => x.State == state);
+
+                if (token is null)
+                {
+                    error = "No token found for state";
+                }
+                else 
+                {
+                    token.AccessToken = tokenModel.AccessToken;
+                    token.TokenType = tokenModel.TokenType;
+                    token.RefreshToken = tokenModel.RefreshToken;
+                    token.ExpiresIn = tokenModel.ExpiresIn;
+                    _context.SaveChanges();
+
+                    ViewBag.Token = tokenModel;
+                }
             }
             else
             {
@@ -95,7 +116,7 @@ public class HomeController : Controller
             }
         }
 
-        if (!String.IsNullOrEmpty(error))
+        if (!string.IsNullOrEmpty(error))
         {
             ViewBag.Error = error;
         }
@@ -106,11 +127,11 @@ public class HomeController : Controller
     }
 
 
-    private static bool ValidateCallbackValues(String code, String state, out String error)
+    private bool ValidateCallbackValues(string code, string state, out string error)
     {
         error = null;
 
-        if (String.IsNullOrEmpty(code))
+        if (string.IsNullOrEmpty(code))
         {
             error = "Invalid auth code";
         }
@@ -123,18 +144,21 @@ public class HomeController : Controller
             }
             else
             {
-                TokenModel tokenModel;
-                if (!s_authorizationRequests.TryGetValue(authorizationRequestKey.ToString(), out tokenModel))
+                var token = _context.ExternalServiceToken.FirstOrDefault(x => x.State == authorizationRequestKey.ToString());
+
+                if (token is null)
                 {
                     error = "Unknown authorization request key";
                 }
-                else if (!tokenModel.IsPending)
+                else if (!token.IsPending)
                 {
                     error = "Authorization request key already used";
                 }
                 else
                 {
-                    s_authorizationRequests[authorizationRequestKey.ToString()].IsPending = false; // mark the state value as used so it can't be reused
+                    // mark the state value as used so it can't be reused
+                    token.IsPending = false;
+                    _context.SaveChanges();
                 }
             }
         }
