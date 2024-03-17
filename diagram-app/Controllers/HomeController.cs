@@ -5,6 +5,10 @@ using diagram_app.Models;
 using System.Web;
 using Newtonsoft.Json;
 using System.Xml.Schema;
+using Microsoft.VisualStudio.Services.Common;
+using Microsoft.VisualStudio.Services.WebApi;
+using Microsoft.TeamFoundation.SourceControl.WebApi;
+using Microsoft.TeamFoundation.Core.WebApi;
 
 namespace diagram_app.Controllers;
 
@@ -34,7 +38,7 @@ public class HomeController : Controller
     public async Task<IActionResult> PrivacyAsync()
     {
         string[] scopes = _configuration["scope"]?.Split(' ') ?? Array.Empty<string>();
-        
+
         string state = Guid.NewGuid().ToString();
 
         var token = new ExternalServiceToken()
@@ -99,7 +103,7 @@ public class HomeController : Controller
                 {
                     error = "No token found for state";
                 }
-                else 
+                else
                 {
                     token.AccessToken = tokenModel.AccessToken;
                     token.TokenType = tokenModel.TokenType;
@@ -164,6 +168,37 @@ public class HomeController : Controller
         }
 
         return error == null;
+    }
+
+    public async Task<IActionResult> GetRepoAsync()
+    {
+        var token = _context.ExternalServiceToken.FirstOrDefault();
+
+        var uri = new Uri("https://dev.azure.com/cityzen");
+        var personalAccessToken = token.AccessToken;
+        var credentials = new VssBasicCredential(string.Empty, personalAccessToken);
+
+        using (var connection = new VssConnection(uri, credentials))
+        {
+            var gitClient = connection.GetClient<GitHttpClient>();
+            var projectClient = connection.GetClient<ProjectHttpClient>();
+
+            // Assuming you know the name of the project
+            var projectName = "publicinput";
+
+            var project = await projectClient.GetProject(projectName);
+            
+            // Assuming you have a project ID
+            var projectId = project.Id;
+
+            var repositories = await gitClient.GetRepositoriesAsync(projectId);
+
+            foreach (var repo in repositories)
+            {
+                Console.WriteLine($"Repo: {repo.Name}");
+            }
+        }
+        return Ok();
     }
 
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
